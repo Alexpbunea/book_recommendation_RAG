@@ -7,7 +7,7 @@ from openai.types.responses import Response
 from openai.lib._parsing._responses import type_to_text_format_param
 from .setup import Provider
 from utils import logger
-from .ouput_schema import OutputSchema
+from .ouput_schema import OutputSchema, TextClassificationSchema
 
 
 class Generation:
@@ -20,7 +20,6 @@ class Generation:
     async def generate_content(self, user_prompt : str, reasoning : str = "low", format = None, temperature = 0.1) -> str:
         request_id = str(uuid.uuid4())
         logger.info(f"Calling Azure OpenAI API for content generation - Request ID: {request_id}")
-        format = OutputSchema
         
         try:
             text_format = type_to_text_format_param(format) if format else None
@@ -92,4 +91,48 @@ class Generation:
         import json
         output_data = json.loads(response.output_text)
         parsed_output = OutputSchema(**output_data)
+        return parsed_output
+
+    async def generate_classification_example(self, books_sample):
+        books_info = ""
+        for idx, row in books_sample.iterrows():
+            
+            books_info += f"""
+                            Book {idx}:
+                            - Title: {row['title']}
+                            - Author: {row['author']}
+                            - Genres: {row['genres']}
+                            - Rating: {row.get('rating', 'N/A')}/5
+                            {row['pages']}- Description: {row['description'][:200]}...
+                            """
+                    
+            prompt = f"""You are generating training data for a book recommendation system.
+
+                        Given these books from a database:
+                        {books_info}
+
+                        Generate a realistic example with:
+                        1. A user query (natural language, varied style) looking for books similar to the ones provided.
+                        CRITICAL: The query must describe the plot, mood, atmosphere, or setting WITHOUT explicitly naming the genre.
+                        - Bad: "I want a horror book."
+                        - Good: "I want a story that keeps me up at night and makes me afraid of the dark."
+                        - Bad: "Looking for a romance novel."
+                        - Good: "I need a story about two people falling in love against all odds."
+                        
+                        2. A list of genres that are explicitly or implicitly mentioned in the generated query.
+
+                        Output as JSON:
+                        {{
+                        "query": "user's natural question (implicit description)",
+                        "genres": ["genre1", "genre2"]
+                        }}
+
+                        IMPORTANT: Vary query complexity. Do NOT use the genre names in the query text."""
+        
+        response = await self.generate_content(prompt, format=TextClassificationSchema)
+        
+        # Parse the JSON output from the response
+        import json
+        output_data = json.loads(response.output_text)
+        parsed_output = TextClassificationSchema(**output_data)
         return parsed_output

@@ -13,4 +13,11 @@ class OutputSchema(BaseModel):
     response: str
 
 
+class TextClassificationSchema(BaseModel):
+    model_config = ConfigDict(json_dumps=orjson_dumps)
+
+    query: str
+    genres: List[str]
+
+
 
