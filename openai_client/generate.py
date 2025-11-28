@@ -94,6 +94,11 @@ class Generation:
         return parsed_output
 
     async def generate_classification_example(self, books_sample):
+        TARGET_GENRES = [
+            "Romance", "Fantasy", "Young Adult", "Contemporary", 
+            "Nonfiction", "Mystery", "Historical Fiction", "Classics"
+        ]
+        
         books_info = ""
         for idx, row in books_sample.iterrows():
             
@@ -111,6 +116,9 @@ class Generation:
                         Given these books from a database:
                         {books_info}
 
+                        The allowed genres for classification are:
+                        {', '.join(TARGET_GENRES)}
+
                         Generate a realistic example with:
                         1. A user query (natural language, varied style) looking for books similar to the ones provided.
                         CRITICAL: The query must describe the plot, mood, atmosphere, or setting WITHOUT explicitly naming the genre.
@@ -119,15 +127,16 @@ class Generation:
                         - Bad: "Looking for a romance novel."
                         - Good: "I need a story about two people falling in love against all odds."
                         
-                        2. A list of genres that are explicitly or implicitly mentioned in the generated query.
+                        2. A list of genres from the ALLOWED LIST above that are explicitly or implicitly mentioned in the generated query.
+                        Select the most relevant genres (max 2-3) from the allowed list.
 
                         Output as JSON:
                         {{
                         "query": "user's natural question (implicit description)",
-                        "genres": ["genre1", "genre2"]
+                        "genres": ["Fantasy", "Young Adult"]
                         }}
 
-                        IMPORTANT: Vary query complexity. Do NOT use the genre names in the query text."""
+                        IMPORTANT: Vary query complexity. Do NOT use the genre names in the query text. Only use genres from the allowed list."""
         
         response = await self.generate_content(prompt, format=TextClassificationSchema)
         
@@ -135,4 +144,8 @@ class Generation:
         import json
         output_data = json.loads(response.output_text)
         parsed_output = TextClassificationSchema(**output_data)
+        
+        # Strict filtering: remove any genres not in the allowed list
+        parsed_output.genres = [g for g in parsed_output.genres if g in TARGET_GENRES]
+        
         return parsed_output

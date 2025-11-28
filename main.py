@@ -23,7 +23,7 @@ async def main():
         num_examples = args.num_examples  # Adjust as needed
         
         # Semaphore to limit concurrent requests to 10
-        semaphore = asyncio.Semaphore(10)
+        semaphore = asyncio.Semaphore(5)
         
         async def generate_with_semaphore(books_sample, mode):
             async with semaphore:
@@ -32,10 +32,31 @@ async def main():
                 elif mode == "classification":
                     return await gen.generate_classification_example(books_sample)
         
+        # Target genres for balanced classification
+        TARGET_GENRES = [
+            "Romance", "Fantasy", "Young Adult", "Contemporary", 
+            "Nonfiction", "Mystery", "Historical Fiction", "Classics"
+        ]
+        
         # Create tasks for parallel execution
         tasks = []
         for i in range(num_examples):
-            books_sample = df.sample(10, random_state=i)  # Sample 10 books for more realistic RAG scenario
+            if args.mode == "classification":
+                # Round-robin selection of target genre
+                target_genre = TARGET_GENRES[i % len(TARGET_GENRES)]
+                # Filter books that contain the target genre
+                # Using string contains for simplicity as these genre names are distinct enough
+                genre_df = df[df['genres'].astype(str).str.contains(target_genre, case=False, regex=False)]
+                
+                if len(genre_df) >= 10:
+                    books_sample = genre_df.sample(10, random_state=i)
+                else:
+                    # Fallback if not enough books for this genre (unlikely for top genres)
+                    books_sample = df.sample(10, random_state=i)
+            else:
+                # Default random sampling for RAG mode
+                books_sample = df.sample(10, random_state=i)
+                
             task = generate_with_semaphore(books_sample, args.mode)
             tasks.append(task)
         
