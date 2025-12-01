@@ -22,6 +22,8 @@ class Provider:
     def setup(self):
         logger.info("Setting up Azure OpenAI provider...")
         api_key = os.getenv("OPENAI_API_KEY")
+        endpoint = os.getenv("ENDPOINT")
+        print(api_key, endpoint)
         
 
         if not api_key:
@@ -29,7 +31,9 @@ class Provider:
             raise ValueError("Missing Azure OpenAI API key, endpoint or api version")
 
         try:
-            self.async_client = AsyncOpenAI(api_key=api_key, http_client=DefaultAioHttpClient())
+            self.async_client = AsyncOpenAI(api_key=api_key,
+                                            base_url=endpoint,
+                                            http_client=DefaultAioHttpClient())
             logger.info("Azure provider setup complete.")
         except Exception as e:
             logger.critical("Azure OpenAI setup failed.", exc_info=True)

@@ -7,7 +7,7 @@ from openai.types.responses import Response
 from openai.lib._parsing._responses import type_to_text_format_param
 from .setup import Provider
 from utils import logger
-from .ouput_schema import OutputSchema, TextClassificationSchema
+from .ouput_schema import OutputSchema, TextClassificationSchema, NERList
 
 
 class Generation:
@@ -22,6 +22,7 @@ class Generation:
         logger.info(f"Calling Azure OpenAI API for content generation - Request ID: {request_id}")
         
         try:
+            
             text_format = type_to_text_format_param(format) if format else None
 
             response = await self.async_client.responses.create(
@@ -93,59 +94,67 @@ class Generation:
         parsed_output = OutputSchema(**output_data)
         return parsed_output
 
-    async def generate_classification_example(self, books_sample):
-        TARGET_GENRES = [
-            "Romance", "Fantasy", "Young Adult", "Contemporary", 
-            "Nonfiction", "Mystery", "Historical Fiction", "Classics"
-        ]
+    async def generate_ner_example(self, books_sample):
+        """Generate 2 new diverse, user-like NER examples using real book titles and authors."""
+        # Extract titles and authors from the books sample
+        books_info = []
+        for _, row in books_sample.iterrows():
+            books_info.append({
+                "title": row['title'],
+                "author": row['author']
+            })
         
-        books_info = ""
-        for idx, row in books_sample.iterrows():
-            
-            books_info += f"""
-                            Book {idx}:
-                            - Title: {row['title']}
-                            - Author: {row['author']}
-                            - Genres: {row['genres']}
-                            - Rating: {row.get('rating', 'N/A')}/5
-                            {row['pages']}- Description: {row['description'][:200]}...
-                            """
-                    
-            prompt = f"""You are generating training data for a book recommendation system.
+        prompt = f"""You are generating training data for a Named Entity Recognition (NER) system that identifies book titles and authors in natural user sentences.
 
-                        Given these books from a database:
-                        {books_info}
+Use these real books as source material:
+{books_info}
 
-                        The allowed genres for classification are:
-                        {', '.join(TARGET_GENRES)}
+Generate 2 NEW examples that sound like REAL users talking naturally about books. Be creative and diverse!
 
-                        Generate a realistic example with:
-                        1. A user query (natural language, varied style) looking for books similar to the ones provided.
-                        CRITICAL: The query must describe the plot, mood, atmosphere, or setting WITHOUT explicitly naming the genre.
-                        - Bad: "I want a horror book."
-                        - Good: "I want a story that keeps me up at night and makes me afraid of the dark."
-                        - Bad: "Looking for a romance novel."
-                        - Good: "I need a story about two people falling in love against all odds."
-                        
-                        2. A list of genres from the ALLOWED LIST above that are explicitly or implicitly mentioned in the generated query.
-                        Select the most relevant genres (max 2-3) from the allowed list.
+Vary the sentence patterns - use things like:
+- Casual mentions: "My friend won't stop talking about Dune"
+- Questions: "Who wrote The Hobbit again?"
+- Recommendations: "You should totally check out 1984"
+- Opinions: "I think Tolkien is overrated honestly"
+- Partial recalls: "That book by the guy who wrote Harry Potter..."
+- Typos/informal: "just finished reading game of throns lol"
+- Multiple books: "I prefer Sanderson over Rothfuss"
+- Context mentions: "Reading The Name of the Wind on my commute"
+- Negative opinions: "Couldn't get into Pride and Prejudice"
+- Comparisons: "It's like a mix of Dune and Foundation"
 
-                        Output as JSON:
-                        {{
-                        "query": "user's natural question (implicit description)",
-                        "genres": ["Fantasy", "Young Adult"]
-                        }}
+For each example, provide:
+- tokenized_text: List of tokens (words and punctuation as separate tokens)
+- ner: List of span objects with start_idx, end_idx (token positions, 0-indexed, inclusive), and label ("title" or "author")
 
-                        IMPORTANT: Vary query complexity. Do NOT use the genre names in the query text. Only use genres from the allowed list."""
+IMPORTANT:
+- Make sentences sound NATURAL and CONVERSATIONAL, not formal
+- Tokenize properly: punctuation should be separate tokens
+- Contractions like "don't" can be one token or split - be consistent
+- Include typos, slang, or informal language sometimes
+- Not every sentence needs both title AND author
+- Use the ACTUAL book titles and author names from the list above
+
+Output as JSON:
+{{
+  "items": [
+    {{
+      "tokenized_text": ["My", "friend", "keeps", "recommending", "Dune", ",", "is", "it", "good", "?"],
+      "ner": [{{"start_idx": 4, "end_idx": 4, "label": "title"}}]
+    }},
+    {{
+      "tokenized_text": ["Honestly", "I", "think", "Tolkien", "is", "a", "bit", "overrated"],
+      "ner": [{{"start_idx": 3, "end_idx": 3, "label": "author"}}]
+    }}
+  ]
+}}
+
+Generate 2 diverse, natural-sounding examples now:"""
         
-        response = await self.generate_content(prompt, format=TextClassificationSchema)
+        response = await self.generate_content(prompt, format=NERList)
         
         # Parse the JSON output from the response
         import json
         output_data = json.loads(response.output_text)
-        parsed_output = TextClassificationSchema(**output_data)
-        
-        # Strict filtering: remove any genres not in the allowed list
-        parsed_output.genres = [g for g in parsed_output.genres if g in TARGET_GENRES]
-        
+        parsed_output = NERList(**output_data)
         return parsed_output
