@@ -7,6 +7,19 @@ from setfit import SetFitModel
 from peft import PeftModel
 import torch
 from contextlib import asynccontextmanager
+from huggingface_hub import login
+from dotenv import load_dotenv
+import os
+
+# Load environment variables and login to HuggingFace
+load_dotenv()
+hf_token = os.getenv("HF_TOKEN")
+if hf_token:
+    login(token=hf_token)
+    print("Logged in to HuggingFace!")
+
+# Import RAG search functionality
+from search_books import BookSearcher
 
 # Genre names for classification model
 GENRE_NAMES = ['Classics', 'Contemporary', 'Fantasy', 'Historical Fiction', 'Mystery', 'Nonfiction', 'Romance', 'Young Adult']
@@ -15,18 +28,20 @@ GENRE_NAMES = ['Classics', 'Contemporary', 'Fantasy', 'Historical Fiction', 'Mys
 SETFIT_MODEL = "aicoral048/setfit-fined-tuned-books"
 NER_MODEL = "aicoral048/ner-books-model-final"
 QWEN_MODEL = "aicoral048/qwen-finetuned-final"
-QWEN_BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+QWEN_BASE_MODEL = "Qwen/Qwen3-0.6B"#"google/gemma-3-270m-it"#Qwen/Qwen2.5-0.5B-Instruct"
+
 
 # Global model variables
 classification_model = None
 ner_pipeline = None
 qwen_tokenizer = None
 qwen_model = None
+book_searcher = None
 
 
 def load_models():
     """Load all models into memory"""
-    global classification_model, ner_pipeline, qwen_tokenizer, qwen_model
+    global classification_model, ner_pipeline, qwen_tokenizer, qwen_model, book_searcher
     
     try:
         print("Loading SetFit classification model...")
@@ -46,22 +61,19 @@ def load_models():
             device=device
         )
         
-        print("Loading Qwen model...")
-        qwen_tokenizer = AutoTokenizer.from_pretrained(QWEN_MODEL)
+        print("Loading Qwen3 model...")
+        qwen_tokenizer = AutoTokenizer.from_pretrained(QWEN_BASE_MODEL)
         
-        # Load base model
+        # Load Qwen3 with auto device mapping
         print("Loading base model...")
-        base_model = AutoModelForCausalLM.from_pretrained(
+        qwen_model = AutoModelForCausalLM.from_pretrained(
             QWEN_BASE_MODEL,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            low_cpu_mem_usage=True
+            torch_dtype="auto",
+            device_map="auto"
         )
         
-        # Load PEFT adapter
-        qwen_model = PeftModel.from_pretrained(base_model, QWEN_MODEL)
-        
-        if torch.cuda.is_available():
-            qwen_model.to('cuda')
+        print("Loading RAG book searcher...")
+        book_searcher = BookSearcher()
         
         print("All models loaded successfully!")
     except Exception as e:
@@ -105,9 +117,9 @@ class ChatRequest(BaseModel):
     message: str
     history: list[ChatMessage] = []
     system_message: str = "You are a helpful assistant specialized in books. Provide concise, focused book recommendations with brief explanations."
-    max_tokens: int = 150
-    temperature: float = 0.4
-    top_p: float = 0.8
+    max_tokens: int = 4096
+    temperature: float = 0.7
+    top_p: float = 0.6
 
 
 def classify_genres(text: str) -> list[str]:
@@ -156,14 +168,21 @@ def extract_entities(text: str) -> dict:
 
 
 def generate_with_qwen(prompt: str, max_tokens: int, temperature: float, top_p: float):
-    """Step 3: Generate response using Qwen model with streaming"""
+    """Generate response using Qwen3 model with thinking mode and streaming"""
     try:
         if qwen_tokenizer is None or qwen_model is None:
             yield "Error: Qwen model not loaded"
             return
         
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        inputs = qwen_tokenizer(prompt, return_tensors="pt").to(device)
+        # Prepare chat template with thinking enabled
+        messages = [{"role": "user", "content": prompt}]
+        text = qwen_tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False  # Enable thinking mode for better reasoning
+        )
+        model_inputs = qwen_tokenizer([text], return_tensors="pt").to(qwen_model.device)
         
         # Use TextIteratorStreamer for streaming generation
         from transformers import TextIteratorStreamer
@@ -172,16 +191,11 @@ def generate_with_qwen(prompt: str, max_tokens: int, temperature: float, top_p: 
         streamer = TextIteratorStreamer(qwen_tokenizer, skip_prompt=True, skip_special_tokens=True)
         
         generation_kwargs = dict(
-            **inputs,
-            max_new_tokens=max_tokens,
+            **model_inputs,
+            max_new_tokens=2048,  # Increased for longer responses
             temperature=temperature,
             top_p=top_p,
             do_sample=True,
-            num_beams=1,
-            early_stopping=True,
-            repetition_penalty=1.5,
-            length_penalty=1.0,
-            pad_token_id=qwen_tokenizer.eos_token_id,
             streamer=streamer
         )
         
@@ -189,9 +203,14 @@ def generate_with_qwen(prompt: str, max_tokens: int, temperature: float, top_p: 
         thread = Thread(target=qwen_model.generate, kwargs=generation_kwargs)
         thread.start()
         
-        # Stream the output
+        # Stream output directly (thinking is disabled)
         for new_text in streamer:
-            yield new_text
+            # Clean up special tokens
+            clean_text = new_text.replace("<think>", "").replace("</think>", "")
+            clean_text = clean_text.replace("<|im_end|>", "").replace("<|im_start|>", "")
+            clean_text = clean_text.replace("<|endoftext|>", "")
+            if clean_text:
+                yield clean_text
         
         thread.join()
         
@@ -202,7 +221,7 @@ def generate_with_qwen(prompt: str, max_tokens: int, temperature: float, top_p: 
 
 def stream_response(request: ChatRequest):
     """
-    Pipeline: User Query -> SetFit (genre classification) -> NER (authors/titles extraction) -> Qwen (generation)
+    Pipeline: User Query -> SetFit (genre classification) -> NER (authors/titles extraction) -> RAG Search -> Qwen (generation)
     """
     message = request.message
     history = request.history
@@ -218,32 +237,51 @@ def stream_response(request: ChatRequest):
     authors = entities['authors']
     titles = entities['titles']
     
-    # Step 3: Build enriched context for Qwen
+    print(f"[Pipeline] Query: {message}")
+    print(f"[Pipeline] Genres: {predicted_genres}")
+    print(f"[Pipeline] Authors: {authors}")
+    print(f"[Pipeline] Titles: {titles}")
+    
+    # Step 3: RAG Search - Hybrid search with genre prioritization
+    retrieved_books = []
+    books_context = "No books found in database."
+    if book_searcher is not None:
+        try:
+            retrieved_books = book_searcher.hybrid_search(
+                query=message,
+                genres=predicted_genres if predicted_genres else None,
+                authors=authors if authors else None,
+                titles=titles if titles else None,
+                n_results=2  # 2 recommendations
+            )
+            books_context = book_searcher.format_results_for_prompt(retrieved_books)
+            print(books_context)
+        except Exception as e:
+            print(f"RAG search error: {e}")
+            books_context = "Error searching book database."
+    
+    # Step 4: Build enriched context for Qwen
     genres_info = f"Predicted Genres: {', '.join(predicted_genres)}" if predicted_genres else "Predicted Genres: None detected"
-    authors_info = f"Extracted Authors: {', '.join(authors)}" if authors else "Extracted Authors: None detected"
-    titles_info = f"Extracted Titles: {', '.join(titles)}" if titles else "Extracted Titles: None detected"
+    authors_info = f"Mentioned Authors: {', '.join(authors)}" if authors else ""
+    titles_info = f"Mentioned Titles: {', '.join(titles)}" if titles else ""
     
-    # Build conversation history as text
-    history_text = ""
-    for msg in history:
-        role = msg.role
-        content = msg.content
-        history_text += f"{role.capitalize()}: {content}\n"
+    # Count how many books we found
+    num_books = len(retrieved_books)
     
-    # Build the full prompt for Qwen (optimized for small model)
-    context = f"""Analysis of user query:
-- {genres_info}
-- {authors_info}
-- {titles_info}"""
-    
-    prompt = f"""You are a book recommendation expert. Provide ONE book recommendation in 2-3 sentences max.
+    # Build the full prompt for Qwen - simple and direct
+    prompt = f"""Here are {num_books} book recommendations:
 
-Query: {message}
-Context: {context}
+{books_context}
 
-Book recommendation (title and author only):"""
+Write a brief, friendly response presenting these {num_books} books. For each book use:
+📚 **Title** by Author - Why it's great (1 sentence)
 
-    # Step 4: Generate response with Qwen (streaming)
+RULES:
+- Only mention the {num_books} books above
+- Do not add any other books
+- Keep explanations short"""
+
+    # Step 5: Generate response with Qwen (streaming)
     for chunk in generate_with_qwen(prompt, max_tokens, temperature, top_p):
         yield chunk
 
@@ -269,7 +307,8 @@ async def health_check():
         "models_loaded": {
             "classification": classification_model is not None,
             "ner": ner_pipeline is not None,
-            "qwen": qwen_model is not None
+            "qwen": qwen_model is not None,
+            "rag_searcher": book_searcher is not None
         }
     }
 

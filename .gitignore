@@ -265,3 +265,8 @@ CONFIDENCE_SCORING_IMPLEMENTATION.md
 
 .vscode
 cloudflared.deb
+.env
+
+data/142d9147-a90a-49fe-8ddf-b9c598111d74
+data/247e4680-325d-488c-ac8b-0026b470e992
+data/chroma.sqlite3
