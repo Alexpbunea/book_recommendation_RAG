@@ -9,6 +9,7 @@ import chromadb
 from chromadb import Documents, EmbeddingFunction, Embeddings
 from datetime import datetime
 from tqdm import tqdm
+from utils import logger
 
 # Use the SetFit model's base for embeddings (fine-tuned on genre classification)
 EMBEDDING_MODEL = "aicoral048/setfit-fined-tuned-books"
@@ -24,10 +25,10 @@ class SetFitEmbeddingFunction(EmbeddingFunction):
     
     def __init__(self, model_name: str = EMBEDDING_MODEL):
         from setfit import SetFitModel
-        print("Loading SetFit embedding model...")
+        logger.info("Loading SetFit embedding model...")
         setfit_model = SetFitModel.from_pretrained(model_name)
         self._model = setfit_model.model_body
-        print("Embedding model loaded!")
+        logger.info("Embedding model loaded!")
     
     def __call__(self, input: Documents) -> Embeddings:
         embeddings = self._model.encode(input, show_progress_bar=False)
@@ -36,7 +37,7 @@ class SetFitEmbeddingFunction(EmbeddingFunction):
 
 def load_books_data():
     """Load and preprocess books data"""
-    print(f"Loading books from {BOOKS_CSV}...")
+    logger.info(f"Loading books from {BOOKS_CSV}...")
     df = pd.read_csv(BOOKS_CSV)
     
     # Clean up data
@@ -49,7 +50,7 @@ def load_books_data():
         'published_year': 0
     })
     
-    print(f"Loaded {len(df)} books with valid data")
+    logger.info(f"Loaded {len(df)} books with valid data")
     return df
 
 
@@ -106,7 +107,7 @@ def index_books(df, description_collection, genre_collection):
             "description": str(descriptions[i])[:500]  # Truncate for metadata storage
         })
     
-    print("Indexing into description collection (embeddings auto-generated)...")
+    logger.info("Indexing into description collection (embeddings auto-generated)...")
     for i in tqdm(range(0, len(ids), BATCH_SIZE)):
         end_idx = min(i + BATCH_SIZE, len(ids))
         description_collection.add(
@@ -115,7 +116,7 @@ def index_books(df, description_collection, genre_collection):
             metadatas=metadatas[i:end_idx]
         )
     
-    print("Indexing into genre collection (embeddings auto-generated)...")
+    logger.info("Indexing into genre collection (embeddings auto-generated)...")
     for i in tqdm(range(0, len(ids), BATCH_SIZE)):
         end_idx = min(i + BATCH_SIZE, len(ids))
         genre_collection.add(
@@ -124,12 +125,12 @@ def index_books(df, description_collection, genre_collection):
             metadatas=metadatas[i:end_idx]
         )
     
-    print(f"Successfully indexed {len(ids)} books!")
+    logger.info(f"Successfully indexed {len(ids)} books!")
 
 
 def main():
     # Initialize ChromaDB with persistent storage
-    print(f"Initializing ChromaDB at {CHROMA_PATH}...")
+    logger.info(f"Initializing ChromaDB at {CHROMA_PATH}...")
     client = chromadb.PersistentClient(path=CHROMA_PATH)
     
     # Create embedding function
@@ -143,7 +144,7 @@ def main():
     
     # Check if already indexed
     if description_collection.count() > 0:
-        print(f"Collections already have {description_collection.count()} items.")
+        logger.warning(f"Collections already have {description_collection.count()} items.")
         response = input("Do you want to clear and re-index? (y/n): ")
         if response.lower() == 'y':
             # Delete and recreate collections
@@ -151,15 +152,15 @@ def main():
             client.delete_collection("book_genres")
             description_collection, genre_collection = create_collections(client, embedding_function)
         else:
-            print("Skipping indexing. Exiting.")
+            logger.info("Skipping indexing. Exiting.")
             return
     
     # Index books
     index_books(df, description_collection, genre_collection)
     
-    print("\n✅ Indexing complete!")
-    print(f"Description collection: {description_collection.count()} items")
-    print(f"Genre collection: {genre_collection.count()} items")
+    logger.info("\n✅ Indexing complete!")
+    logger.info(f"Description collection: {description_collection.count()} items")
+    logger.info(f"Genre collection: {genre_collection.count()} items")
 
 
 if __name__ == "__main__":

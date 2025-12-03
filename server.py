@@ -10,13 +10,14 @@ from contextlib import asynccontextmanager
 from huggingface_hub import login
 from dotenv import load_dotenv
 import os
+from utils import logger
 
 # Load environment variables and login to HuggingFace
 load_dotenv()
 hf_token = os.getenv("HF_TOKEN")
 if hf_token:
     login(token=hf_token)
-    print("Logged in to HuggingFace!")
+    logger.info("Logged in to HuggingFace!")
 
 # Import RAG search functionality
 from search_books import BookSearcher
@@ -44,10 +45,10 @@ def load_models():
     global classification_model, ner_pipeline, qwen_tokenizer, qwen_model, book_searcher
     
     try:
-        print("Loading SetFit classification model...")
+        logger.info("Loading SetFit classification model...")
         classification_model = SetFitModel.from_pretrained(SETFIT_MODEL)
         
-        print("Loading NER pipeline...")
+        logger.info("Loading NER pipeline...")
         ner_tokenizer = AutoTokenizer.from_pretrained(NER_MODEL)
         ner_model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
         
@@ -61,35 +62,35 @@ def load_models():
             device=device
         )
         
-        print("Loading Qwen3 model...")
+        logger.info("Loading Qwen3 model...")
         qwen_tokenizer = AutoTokenizer.from_pretrained(QWEN_BASE_MODEL)
         
         # Load Qwen3 with auto device mapping
-        print("Loading base model...")
+        logger.info("Loading base model...")
         qwen_model = AutoModelForCausalLM.from_pretrained(
             QWEN_BASE_MODEL,
             torch_dtype="auto",
             device_map="auto"
         )
         
-        print("Loading RAG book searcher...")
+        logger.info("Loading RAG book searcher...")
         book_searcher = BookSearcher()
         
-        print("All models loaded successfully!")
+        logger.info("All models loaded successfully!")
     except Exception as e:
-        print(f"Error loading models: {e}")
+        logger.error(f"Error loading models: {e}")
         raise e
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load models on startup"""
-    print("Loading models...")
+    logger.info("Loading models...")
     load_models()
-    print("Models loaded, server ready!")
+    logger.info("Models loaded, server ready!")
     yield
     # Cleanup on shutdown (if needed)
-    print("Shutting down...")
+    logger.info("Shutting down...")
 
 
 app = FastAPI(
@@ -139,7 +140,7 @@ def classify_genres(text: str) -> list[str]:
         
         return predicted_genre_names
     except Exception as e:
-        print(f"Classification error: {e}")
+        logger.error(f"Classification error: {e}")
         return []
 
 
@@ -163,7 +164,7 @@ def extract_entities(text: str) -> dict:
         
         return {'authors': authors, 'titles': filtered_titles}
     except Exception as e:
-        print(f"NER error: {e}")
+        logger.error(f"NER error: {e}")
         return {'authors': [], 'titles': []}
 
 
@@ -215,7 +216,7 @@ def generate_with_qwen(prompt: str, max_tokens: int, temperature: float, top_p: 
         thread.join()
         
     except Exception as e:
-        print(f"Qwen error: {e}")
+        logger.error(f"Qwen error: {e}")
         yield f"Error generating response: {e}"
 
 
@@ -237,10 +238,10 @@ def stream_response(request: ChatRequest):
     authors = entities['authors']
     titles = entities['titles']
     
-    print(f"[Pipeline] Query: {message}")
-    print(f"[Pipeline] Genres: {predicted_genres}")
-    print(f"[Pipeline] Authors: {authors}")
-    print(f"[Pipeline] Titles: {titles}")
+    logger.info(f"[Pipeline] Query: {message}")
+    logger.info(f"[Pipeline] Genres: {predicted_genres}")
+    logger.info(f"[Pipeline] Authors: {authors}")
+    logger.info(f"[Pipeline] Titles: {titles}")
     
     # Step 3: RAG Search - Hybrid search with genre prioritization
     retrieved_books = []
@@ -255,9 +256,9 @@ def stream_response(request: ChatRequest):
                 n_results=2  # 2 recommendations
             )
             books_context = book_searcher.format_results_for_prompt(retrieved_books)
-            print(books_context)
+            logger.debug(books_context)
         except Exception as e:
-            print(f"RAG search error: {e}")
+            logger.error(f"RAG search error: {e}")
             books_context = "Error searching book database."
     
     # Step 4: Build enriched context for Qwen

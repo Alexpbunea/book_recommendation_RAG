@@ -9,6 +9,7 @@ from chromadb import Documents, EmbeddingFunction, Embeddings
 from typing import Optional
 from sentence_transformers import SentenceTransformer
 import numpy as np
+from utils import logger
 
 CHROMA_PATH = "./data/"
 EMBEDDING_MODEL = "aicoral048/setfit-fined-tuned-books"
@@ -28,10 +29,10 @@ class SetFitEmbeddingFunction(EmbeddingFunction):
     
     def __init__(self, model_name: str = EMBEDDING_MODEL):
         from setfit import SetFitModel
-        print("Loading SetFit embedding model...")
+        logger.info("Loading SetFit embedding model...")
         setfit_model = SetFitModel.from_pretrained(model_name)
         self._model = setfit_model.model_body
-        print("Embedding model loaded!")
+        logger.info("Embedding model loaded!")
     
     def __call__(self, input: Documents) -> Embeddings:
         embeddings = self._model.encode(input, show_progress_bar=False)
@@ -42,9 +43,9 @@ class Reranker:
     """Reranker using all-MiniLM-v6 for final result selection."""
     
     def __init__(self, model_name: str = RERANKER_MODEL):
-        print(f"Loading reranker model: {model_name}...")
+        logger.info(f"Loading reranker model: {model_name}...")
         self.model = SentenceTransformer(model_name)
-        print("Reranker loaded!")
+        logger.info("Reranker loaded!")
     
     def rerank(self, query: str, results: list[dict], top_k: int = FINAL_RESULTS) -> list[dict]:
         """
@@ -99,7 +100,7 @@ class BookSearcher:
         
         # Initialize reranker
         self.reranker = Reranker()
-        print("Search collection loaded!")
+        logger.info("Search collection loaded!")
     
     def search(self, query: str, n_results: int = 5) -> dict:
         """Search books by query similarity."""
@@ -158,7 +159,7 @@ class BookSearcher:
         matches = []
         # Normalize the search title
         title_normalized = self._normalize_text(title)
-        print(f"[Title Search] Normalized title: '{title_normalized}'")
+        logger.debug(f"[Title Search] Normalized title: '{title_normalized}'")
         
         for i, metadata in enumerate(all_docs['metadatas']):
             book_title = metadata.get('title', '')
@@ -178,7 +179,7 @@ class BookSearcher:
                     'title_match': True
                 })
         
-        print(f"[Title Search] Found {len(matches)} matches")
+        logger.info(f"[Title Search] Found {len(matches)} matches")
         matches.sort(key=lambda x: float(x.get('average_rating', 0) or 0), reverse=True)
         return matches[:n_results]
 
@@ -209,12 +210,12 @@ class BookSearcher:
         Returns:
             List of book dictionaries with title, authors, description, score
         """
-        print(f"[Search] Query: {query}")
-        print(f"[Search] Authors: {authors}, Titles: {titles}, Genres: {genres}")
+        logger.info(f"[Search] Query: {query}")
+        logger.info(f"[Search] Authors: {authors}, Titles: {titles}, Genres: {genres}")
         
         # PRIORITY 1: Direct keyword matching for authors
         if authors:
-            print(f"[Search] Using KEYWORD MATCH for authors: {authors}")
+            logger.info(f"[Search] Using KEYWORD MATCH for authors: {authors}")
             keyword_results = []
             for author in authors:
                 keyword_results.extend(self.search_by_author_keyword(author, n_results=5))
@@ -228,14 +229,14 @@ class BookSearcher:
                         seen_ids.add(r['id'])
                         unique_results.append(r)
                 
-                print(f"[Search] Found {len(unique_results)} books by keyword author match")
+                logger.info(f"[Search] Found {len(unique_results)} books by keyword author match")
                 for r in unique_results[:n_results]:
-                    print(f"  - {r['title']} by {r['authors']}")
+                    logger.debug(f"  - {r['title']} by {r['authors']}")
                 return unique_results[:n_results]
         
         # PRIORITY 2: Direct keyword matching for titles
         if titles:
-            print(f"[Search] Using KEYWORD MATCH for titles: {titles}")
+            logger.info(f"[Search] Using KEYWORD MATCH for titles: {titles}")
             keyword_results = []
             for title in titles:
                 keyword_results.extend(self.search_by_title_keyword(title, n_results=5))
@@ -248,11 +249,11 @@ class BookSearcher:
                         seen_ids.add(r['id'])
                         unique_results.append(r)
                 
-                print(f"[Search] Found {len(unique_results)} books by keyword title match")
+                logger.info(f"[Search] Found {len(unique_results)} books by keyword title match")
                 return unique_results[:n_results]
         
         # FALLBACK: Semantic search with genre enrichment
-        print(f"[Search] Using SEMANTIC SEARCH")
+        logger.info("[Search] Using SEMANTIC SEARCH")
         
         # Build genre-enriched query (primary - 85% weight)
         genre_query = query
@@ -340,10 +341,10 @@ class BookSearcher:
         # Rerank top 5 candidates using all-MiniLM-v6 and return top 2
         reranked_results = self.reranker.rerank(query, top_candidates, top_k=n_results)
         
-        print(f"[Reranker] Top {len(reranked_results)} after reranking:")
+        logger.info(f"[Reranker] Top {len(reranked_results)} after reranking:")
         for r in reranked_results:
             author_flag = " [AUTHOR MATCH]" if r.get('author_match') else ""
-            print(f"  - {r['title']} by {r['authors']}{author_flag} (rerank: {r['rerank_score']:.4f})")
+            logger.debug(f"  - {r['title']} by {r['authors']}{author_flag} (rerank: {r['rerank_score']:.4f})")
         
         return reranked_results
     
