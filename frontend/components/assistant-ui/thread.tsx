@@ -104,7 +104,7 @@ const ThreadWelcome: FC = () => {
             transition={{ delay: 0.1 }}
             className="aui-thread-welcome-message-motion-2 text-2xl text-muted-foreground/65"
           >
-            I am here to help you find the best candidates.
+            I am here to help you find new books to read.
           </m.div>
         </div>
       </div>
@@ -118,24 +118,24 @@ const ThreadSuggestions: FC = () => {
     <div className="aui-thread-welcome-suggestions grid w-full gap-2 pb-4 @md:grid-cols-2">
       {[
         {
-          title: "Find relevant resumes",
-          label: "with experience in data science",
-          action: "Find relevant resumes with experience in data science",
+          title: "Find books",
+          label: "in science fiction genre",
+          action: "Find books in science fiction genre",
         },
         {
-          title: "Search CVs",
-          label: "for candidates skilled in cloud computing",
-          action: "Search CVs for candidates skilled in cloud computing",
+          title: "Recommend books",
+          label: "by authors like J.K. Rowling",
+          action: "Recommend books by authors like J.K. Rowling",
         },
         {
-          title: "Retrieve resumes",
-          label: "matching project management roles",
-          action: "Retrieve resumes matching project management roles",
+          title: "Get books",
+          label: "about artificial intelligence",
+          action: "Get books about artificial intelligence",
         },
         {
-          title: "Get CVs",
-          label: "with proficiency in Python and machine learning",
-          action: "Get CVs with proficiency in Python and machine learning",
+          title: "Suggest books",
+          label: "for beginners in programming",
+          action: "Suggest books for beginners in programming",
         },
       ].map((suggestedAction, index) => (
         <m.div
@@ -177,7 +177,7 @@ const Composer: FC = () => {
       <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col rounded-[28px] border border-border bg-muted px-1 pt-1.5 pb-1.5 shadow-[0_9px_9px_0px_rgba(0,0,0,0.01),0_2px_5px_0px_rgba(0,0,0,0.06)] dark:border-muted-foreground/15">
         <ComposerAttachments />
         <ComposerPrimitive.Input
-          placeholder="Type the description of the ideal candidate..."
+          placeholder="Describe the type of book you're looking for..."
           className="aui-composer-input max-h-32 min-h-[2.5rem] w-full resize-none bg-transparent px-3.5 py-2 text-base outline-none placeholder:text-muted-foreground focus:outline-primary"
           rows={1}
           autoFocus

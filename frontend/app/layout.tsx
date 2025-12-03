@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CV Finder - DXC Technology",
-  description: "AI-powered CV information extraction and search system",
+  title: "Bookeria - University of Leon",
+  description: "AI-powered Book recommendation system",
 };
 
 export default function RootLayout({
