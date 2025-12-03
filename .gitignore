@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+.venv/lib/
 lib64/
 parts/
 sdist/
@@ -205,3 +205,62 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# Not used files
+prueba.py
+backend/data/
+.vscode/
+
+
+
+# FROM THE FRONTEND
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+cv_finder_frontend/node_modules
+cv_finder_frontend/.pnp
+.pnp.*
+.yarn/*
+cv_finder_frontend/!.yarn/patches
+cv_finder_frontend/!.yarn/plugins
+cv_finder_frontend/!.yarn/releases
+cv_finder_frontend/!.yarn/versions
+
+# testing
+cv_finder_frontend/coverage
+
+# next.js
+cv_finder_frontend/.next/
+cv_finder_frontend/out/
+
+# production
+cv_finder_frontend/build
+
+# misc
+cv_finder_frontend/.DS_Store
+cv_finder_frontend/*.pem
+
+# debug
+cv_finder_frontend/npm-debug.log*
+cv_finder_frontend/yarn-debug.log*
+cv_finder_frontend/yarn-error.log*
+cv_finder_frontend/.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+cv_finder_frontend/.env*
+
+# vercel
+cv_finder_frontend/.vercel
+
+# typescript
+cv_finder_frontend/*.tsbuildinfo
+cv_finder_frontend/next-env.d.ts
+
+
+STREAMING_FLOW_DIAGRAM.md
+AGENT_INTEGRATION_GUIDE.md
+IMPLEMENTATION_CHECKLIST.md
+CONFIDENCE_SCORING_IMPLEMENTATION.md
+
+.vscode
