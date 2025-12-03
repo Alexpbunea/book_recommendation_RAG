@@ -218,44 +218,44 @@ backend/data/
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-cv_finder_frontend/node_modules
-cv_finder_frontend/.pnp
+frontend/node_modules
+frontend/.pnp
 .pnp.*
 .yarn/*
-cv_finder_frontend/!.yarn/patches
-cv_finder_frontend/!.yarn/plugins
-cv_finder_frontend/!.yarn/releases
-cv_finder_frontend/!.yarn/versions
+frontend/!.yarn/patches
+frontend/!.yarn/plugins
+frontend/!.yarn/releases
+frontend/!.yarn/versions
 
 # testing
-cv_finder_frontend/coverage
+frontend/coverage
 
 # next.js
-cv_finder_frontend/.next/
-cv_finder_frontend/out/
+frontend/.next/
+frontend/out/
 
 # production
-cv_finder_frontend/build
+frontend/build
 
 # misc
-cv_finder_frontend/.DS_Store
-cv_finder_frontend/*.pem
+frontend/.DS_Store
+frontend/*.pem
 
 # debug
-cv_finder_frontend/npm-debug.log*
-cv_finder_frontend/yarn-debug.log*
-cv_finder_frontend/yarn-error.log*
-cv_finder_frontend/.pnpm-debug.log*
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-cv_finder_frontend/.env*
+frontend/.env*
 
 # vercel
-cv_finder_frontend/.vercel
+frontend/.vercel
 
 # typescript
-cv_finder_frontend/*.tsbuildinfo
-cv_finder_frontend/next-env.d.ts
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
 
 
 STREAMING_FLOW_DIAGRAM.md
